@@ -22,8 +22,5 @@ RUN npm install
 # Copy app source
 COPY . .
 
-# Expose port (if needed)
-EXPOSE 3000
-
-# Start the app
+# Start the app (no port exposure needed)
 CMD ["npm", "start"]
