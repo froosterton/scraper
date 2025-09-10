@@ -4,12 +4,13 @@ const { Client } = require('discord.js-selfbot-v13');
 const axios = require('axios');
 const readline = require('readline');
 const { exec } = require('child_process');
+const express = require('express');
 
 // Configuration - Railway deployment ready
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID || '542147434122444838';
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1380043690390847558/DcQu2O3olvdiSD0r5TKyU4YHRH4rBGFZbY93gXMSvcYEi71Z9rGzCYiZXJppRCK8Vr3A';
-const ITEM_IDS = process.env.ITEM_IDS || '123456,789012'; // Comma-separated item IDs
+const CHANNEL_ID = process.env.CHANNEL_ID || 
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 
+const ITEM_IDS = process.env.ITEM_IDS ||
 
 // Validate required environment variables
 if (!DISCORD_TOKEN) {
@@ -20,11 +21,16 @@ if (!DISCORD_TOKEN) {
 const client = new Client({ checkUpdate: false });
 // Remove readline for Railway deployment - no interactive CLI needed
 
+// Express server for healthcheck
+const app = express();
+const PORT = process.env.PORT || 3000;
+
 let driver; // Global Selenium WebDriver instance
 let waitingForResponse = false;
 let processedUsers = new Set();
 let currentMode = 'single';
 let totalLogged = 0;
+let isScraping = false;
 
 // --- VPN SWITCHING ---
 const usCities = ['nyc', 'dal', 'atl', 'chi', 'lax', 'sea'];
@@ -51,12 +57,28 @@ function switchMullvadVPN() {
     });
 }
 
+// Healthcheck endpoint
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'healthy', 
+        scraping: isScraping,
+        totalLogged: totalLogged,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Start Express server
+app.listen(PORT, () => {
+    console.log(`🌐 Healthcheck server running on port ${PORT}`);
+});
+
 client.on('ready', async () => {
     console.log(`${client.user.username} is ready!`);
     await initializeWebDriver();
     
     // Always start scraping with ITEM_IDS from environment
     console.log('🚀 Starting Rolimons scraper...');
+    isScraping = true;
     const itemIds = ITEM_IDS.split(',').map(id => id.trim()).filter(id => id && !isNaN(id));
     if (itemIds.length > 0) {
         console.log('⚙️ Starting scrape for items:', itemIds.join(', '));
@@ -83,7 +105,8 @@ client.on('ready', async () => {
             }
         }
         console.log("✅ All items scraped, script finished.");
-        process.exit(0);
+        isScraping = false;
+        // Don't exit - keep the healthcheck server running
     } else {
         console.log('❌ No valid item IDs found in environment variables');
         process.exit(1);
@@ -330,7 +353,8 @@ async function scrapeRolimonsItem(itemId) {
             }
         }
         console.log("✅ All users logged, script finished.");
-        process.exit(0);
+        isScraping = false;
+        // Don't exit - keep the healthcheck server running
     } catch (error) {
         console.error('❌ Error during scraping:', error.message);
         console.log('🔄 Restarting scrape in 10 seconds...');
