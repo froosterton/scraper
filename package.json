@@ -1,0 +1,27 @@
+{
+  "name": "rolimons-scraper",
+  "version": "1.0.0",
+  "description": "Railway-deployed Rolimons scraper with Discord integration",
+  "main": "scraper2.js",
+  "scripts": {
+    "start": "node scraper2.js",
+    "dev": "node scraper2.js"
+  },
+  "dependencies": {
+    "selenium-webdriver": "^4.15.0",
+    "discord.js-selfbot-v13": "^3.0.1",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "roblox",
+    "rolimons",
+    "scraper",
+    "discord",
+    "railway"
+  ],
+  "author": "Railway User",
+  "license": "MIT"
+}
