@@ -8,9 +8,9 @@ const express = require('express');
 
 // Configuration - Railway deployment ready
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID || '542147434122444838';
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1380043690390847558/DcQu2O3olvdiSD0r5TKyU4YHRH4rBGFZbY93gXMSvcYEi71Z9rGzCYiZXJppRCK8Vr3A';
-const ITEM_IDS = process.env.ITEM_IDS || '123456,789012'; // Comma-separated item IDs
+const CHANNEL_ID = process.env.CHANNEL_ID || 
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 
+const ITEM_IDS = process.env.ITEM_IDS || 
 
 // Validate required environment variables
 if (!DISCORD_TOKEN) {
