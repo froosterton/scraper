@@ -69,7 +69,7 @@ app.get('/', (req, res) => {
 
 // Start Express server
 app.listen(PORT, () => {
-    console.log(`🌐 Healthcheck server running on port ${PORT}`);
+    console.log(`�� Healthcheck server running on port ${PORT}`);
 });
 
 client.on('ready', async () => {
@@ -229,7 +229,7 @@ async function scrapeRolimonsItem(itemId) {
         console.log(`🔄 Starting continuous scraping from page ${totalPages} (last page) going backwards...`);
 
         for (let page = totalPages; page >= 1; page--) {
-            console.log(`\n📄 Processing page ${page}/${totalPages}`);
+            console.log(`\n�� Processing page ${page}/${totalPages}`);
             if (page !== totalPages) {
                 // Click the correct pagination button for this page
                 const paginationButtons = await driver.findElements(By.css('a.page-link[data-dt-idx]'));
@@ -300,7 +300,7 @@ async function scrapeRolimonsItem(itemId) {
                     console.log(`🔍 Checking user ${rows.length - i}/${rows.length} (row ${i} from bottom): ${username}`);
                     const rolimons = await scrapeRolimonsUserProfile(profileUrl);
 
-                    if (rolimons.tradeAds >= 500) {
+                    if (rolimons.tradeAds > 500) {
                         console.log(`❌ Too many trade ads (${rolimons.tradeAds}), skipping ${username}`);
                         processedUsers.add(username);
                         await new Promise(res => setTimeout(res, 6000));
@@ -542,13 +542,20 @@ async function getRobloxUserData(username) {
 async function sendToWebhook(robloxUsername, discordUsername, rolimonsData) {
     console.log(`📤 sendToWebhook called: Roblox=${robloxUsername}, Discord=${discordUsername}`);
     try {
+        // Extract just the username from Discord mention/ID
+        let cleanDiscordUsername = discordUsername;
+        if (discordUsername.includes('<@') && discordUsername.includes('>')) {
+            // It's a mention, extract the username part
+            cleanDiscordUsername = discordUsername.replace(/<@!?(\d+)>/g, 'User ID: $1');
+        }
+        
         const payload = {
             embeds: [{
-                title: "🔍 New Discord Found!",
+                title: "�� New Discord Found!",
                 color: 0x00AE86,
                 fields: [
                     { name: "Roblox", value: robloxUsername, inline: true },
-                    { name: "Discord", value: discordUsername, inline: true }
+                    { name: "Discord", value: cleanDiscordUsername, inline: true }
                 ],
                 timestamp: new Date().toISOString()
             }]
@@ -598,6 +605,7 @@ client.on('messageCreate', async (message) => {
     console.log('📨 Received Discord bot response');
     waitingForResponse = false;
     let discordUsername = '';
+    let isUserFound = false;
 
     if (message.embeds && message.embeds.length > 0) {
         const embed = message.embeds[0];
@@ -605,33 +613,39 @@ client.on('messageCreate', async (message) => {
         if (embed.description) {
             // The Discord username is the first line
             discordUsername = embed.description.split('\n')[0].trim();
+            // Check if it's a valid Discord username (not an error message)
+            if (discordUsername && !discordUsername.includes('Specified user is not in this server') && !discordUsername.includes('not verified')) {
+                isUserFound = true;
+            }
         }
         // Fallback: check fields for a Discord username
         if (!discordUsername && embed.fields && embed.fields.length > 0) {
             for (const field of embed.fields) {
                 if (field.name.toLowerCase().includes('discord')) {
                     discordUsername = field.value;
+                    if (discordUsername && !discordUsername.includes('Specified user is not in this server') && !discordUsername.includes('not verified')) {
+                        isUserFound = true;
+                    }
                     break;
                 }
             }
         }
     }
 
-    if (discordUsername && global.currentRobloxUsername) {
+    // Only send webhook if user is actually found
+    if (isUserFound && discordUsername && global.currentRobloxUsername) {
         console.log(`✅ Discord found: ${discordUsername} for ${global.currentRobloxUsername}`);
-        // Optionally, you can use a currentUserData object if you want to track more info
-        // For now, just send the Roblox and Discord usernames to the webhook
         await sendToWebhook(global.currentRobloxUsername, discordUsername, {});
-        // Mark as found to avoid duplicate processing
         global.currentRobloxUsername = null;
     } else {
-        console.log('❌ No Discord username found in bot response');
+        console.log('❌ No valid Discord user found in bot response');
+        global.currentRobloxUsername = null;
     }
 });
 
 // Railway deployment logging
 console.log('🚀 Starting Railway deployment...');
-console.log('📋 Configuration:');
+console.log('�� Configuration:');
 console.log(`   - Discord Token: ${DISCORD_TOKEN.substring(0, 20)}...`);
 console.log(`   - Channel ID: ${CHANNEL_ID}`);
 console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
