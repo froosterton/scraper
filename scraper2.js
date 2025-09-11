@@ -631,43 +631,56 @@ client.on('messageCreate', async (message) => {
     console.log('📨 Received Discord bot response');
     waitingForResponse = false;
     let discordUsername = '';
-    let isUserFound = false;
+    let isUserFound = true;
 
     if (message.embeds && message.embeds.length > 0) {
         const embed = message.embeds[0];
-        // Try to extract from description (where RoVer puts the Discord username)
+        
+        // Check if this is an error message (user not found, not verified, etc.)
         if (embed.description) {
-            // The Discord username is the first line
-            discordUsername = embed.description.split('\n')[0].trim();
-            // Check if it's a valid Discord username (not an error message)
-            if (discordUsername && !discordUsername.includes('Specified user is not in this server') && !discordUsername.includes('not verified')) {
-                isUserFound = true;
+            const description = embed.description.toLowerCase();
+            if (description.includes('specified user is not in this server') || 
+                description.includes('not verified') ||
+                description.includes('user not found') ||
+                description.includes('no discord found')) {
+                console.log('❌ User not found or not verified, skipping webhook');
+                isUserFound = false;
+                return;
             }
         }
+        
+        // Try to extract Discord username from embed title (where RoVer puts it)
+        if (embed.title) {
+            discordUsername = embed.title.trim();
+            console.log(`✅ Found Discord username in title: ${discordUsername}`);
+        }
+        // Fallback: try to extract from description
+        else if (embed.description) {
+            // The Discord username is the first line
+            discordUsername = embed.description.split('\n')[0].trim();
+            console.log(`✅ Found Discord username in description: ${discordUsername}`);
+        }
         // Fallback: check fields for a Discord username
-        if (!discordUsername && embed.fields && embed.fields.length > 0) {
+        else if (embed.fields && embed.fields.length > 0) {
             for (const field of embed.fields) {
                 if (field.name.toLowerCase().includes('discord')) {
                     discordUsername = field.value;
-                    if (discordUsername && !discordUsername.includes('Specified user is not in this server') && !discordUsername.includes('not verified')) {
-                        isUserFound = true;
-                    }
                     break;
                 }
             }
         }
     }
 
-    // Only send webhook if user is actually found
-    if (isUserFound && discordUsername && global.currentRobloxUsername) {
+    if (discordUsername && global.currentRobloxUsername && isUserFound) {
         console.log(`✅ Discord found: ${discordUsername} for ${global.currentRobloxUsername}`);
         // Get the Rolimons data for this user to include in webhook
         const rolimonsData = global.currentRolimonsData || {};
         await sendToWebhook(global.currentRobloxUsername, discordUsername, rolimonsData);
+        // Mark as found to avoid duplicate processing
         global.currentRobloxUsername = null;
         global.currentRolimonsData = null;
-    } else {
-        console.log('❌ No valid Discord user found in bot response');
+    } else if (isUserFound) {
+        console.log('❌ No Discord username found in bot response');
         global.currentRobloxUsername = null;
         global.currentRolimonsData = null;
     }
