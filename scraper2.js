@@ -8,9 +8,9 @@ const express = require('express');
 
 // Configuration - Railway deployment ready
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID || 
-const WEBHOOK_URL = process.env.WEBHOOK_URL || 
-const ITEM_IDS = process.env.ITEM_IDS || 
+const CHANNEL_ID = process.env.CHANNEL_ID || '542147434122444838';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1380043690390847558/DcQu2O3olvdiSD0r5TKyU4YHRH4rBGFZbY93gXMSvcYEi71Z9rGzCYiZXJppRCK8Vr3A';
+const ITEM_IDS = process.env.ITEM_IDS || '123456,789012'; // Comma-separated item IDs
 
 // Validate required environment variables
 if (!DISCORD_TOKEN) {
@@ -122,56 +122,8 @@ async function initializeWebDriver() {
         options.addArguments('--no-sandbox');
         options.addArguments('--disable-dev-shm-usage');
         options.addArguments('--disable-gpu');
-        options.addArguments('--disable-web-security');
-        options.addArguments('--disable-features=VizDisplayCompositor');
         options.addArguments('--window-size=1920,1080');
-        options.addArguments('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-        
-        // Railway-specific Chrome options
-        options.addArguments('--remote-debugging-port=9222');
-        options.addArguments('--disable-extensions');
-        options.addArguments('--disable-plugins');
-        options.addArguments('--disable-images');
-        options.addArguments('--disable-javascript');
-        options.addArguments('--disable-default-apps');
-        options.addArguments('--disable-background-timer-throttling');
-        options.addArguments('--disable-backgrounding-occluded-windows');
-        options.addArguments('--disable-renderer-backgrounding');
-        options.addArguments('--disable-background-networking');
-        options.addArguments('--disable-sync');
-        options.addArguments('--metrics-recording-only');
-        options.addArguments('--no-first-run');
-        options.addArguments('--safebrowsing-disable-auto-update');
-        options.addArguments('--disable-ipc-flooding-protection');
-        options.addArguments('--disable-hang-monitor');
-        options.addArguments('--disable-prompt-on-repost');
-        options.addArguments('--disable-domain-reliability');
-        options.addArguments('--disable-component-extensions-with-background-pages');
-        options.addArguments('--disable-background-downloads');
-        options.addArguments('--disable-add-to-shelf');
-        options.addArguments('--disable-client-side-phishing-detection');
-        options.addArguments('--disable-default-apps');
-        options.addArguments('--disable-dev-shm-usage');
-        options.addArguments('--disable-extensions');
-        options.addArguments('--disable-features=TranslateUI');
-        options.addArguments('--disable-ipc-flooding-protection');
-        options.addArguments('--disable-popup-blocking');
-        options.addArguments('--disable-prompt-on-repost');
-        options.addArguments('--disable-sync');
-        options.addArguments('--disable-web-resources');
-        options.addArguments('--enable-automation');
-        options.addArguments('--force-color-profile=srgb');
-        options.addArguments('--metrics-recording-only');
-        options.addArguments('--no-first-run');
-        options.addArguments('--safebrowsing-disable-auto-update');
-        options.addArguments('--enable-automation');
-        options.addArguments('--password-store=basic');
-        options.addArguments('--use-mock-keychain');
-        options.addArguments('--disable-blink-features=AutomationControlled');
-        options.addArguments('--disable-features=VizDisplayCompositor');
-
-        // Set binary path for Railway (Chrome is installed in /usr/bin/google-chrome)
-        options.setChromeBinaryPath('/usr/bin/google-chrome');
+        options.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
         driver = await new Builder()
             .forBrowser('chrome')
@@ -182,7 +134,6 @@ async function initializeWebDriver() {
         return true;
     } catch (error) {
         console.error('❌ WebDriver initialization error:', error.message);
-        console.error('Full error:', error);
         return false;
     }
 }
@@ -370,7 +321,7 @@ async function scrapeRolimonsItem(itemId) {
 
                     // Process user immediately
                     console.log(`🔍 Processing user: ${username}`);
-                    await runWhoisCommand(username, rolimons);
+                    await runWhoisCommand(username);
 
                     // Wait 10 seconds before moving to the next user
                     await new Promise(res => setTimeout(res, 10000));
@@ -429,20 +380,16 @@ function parseLastOnlineDays(text) {
 }
 
 async function scrapeRolimonsUserProfile(profileUrl) {
-    const tempOptions = new chrome.Options();
-    tempOptions.addArguments('--headless');
-    tempOptions.addArguments('--no-sandbox');
-    tempOptions.addArguments('--disable-dev-shm-usage');
-    tempOptions.addArguments('--disable-gpu');
-    tempOptions.addArguments('--window-size=1920,1080');
-    tempOptions.addArguments('--disable-web-security');
-    tempOptions.addArguments('--disable-features=VizDisplayCompositor');
-    tempOptions.addArguments('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-    tempOptions.setChromeBinaryPath('/usr/bin/google-chrome');
-    
     const tempDriver = await new Builder()
         .forBrowser('chrome')
-        .setChromeOptions(tempOptions)
+        .setChromeOptions(
+            new chrome.Options()
+                .addArguments('--headless')
+                .addArguments('--disable-gpu')
+                .addArguments('--window-size=1920,1080')
+                .addArguments('--no-sandbox')
+                .addArguments('--disable-dev-shm-usage')
+        )
         .build();
 
     try {
@@ -544,9 +491,8 @@ async function scrapeRolimonsUserProfile(profileUrl) {
     }
 }
 
-async function runWhoisCommand(username, rolimonsData) {
+async function runWhoisCommand(username) {
     global.currentRobloxUsername = username; // Set this BEFORE sending the command
-    global.currentRolimonsData = rolimonsData; // Store Rolimons data for webhook
     console.log(`Running /whois roblox username:${username}...`);
     
     const channel = await client.channels.fetch(CHANNEL_ID);
@@ -596,46 +542,21 @@ async function getRobloxUserData(username) {
 async function sendToWebhook(robloxUsername, discordUsername, rolimonsData) {
     console.log(`📤 sendToWebhook called: Roblox=${robloxUsername}, Discord=${discordUsername}`);
     try {
-        // Clean Discord username (remove any mention formatting)
-        const cleanDiscordUsername = discordUsername.replace(/<@!?\d+>/g, '').trim();
-        
-        const fields = [
-            { name: "�� Roblox", value: robloxUsername, inline: true },
-            { name: "Discord", value: cleanDiscordUsername, inline: true }
-        ];
-        
-        // Add Rolimons value if available
-        if (rolimonsData && rolimonsData.value) {
-            fields.push({ 
-                name: "Rolimons Value", 
-                value: `R$ ${rolimonsData.value.toLocaleString()}`, 
-                inline: true 
-            });
-        }
-        
-        // Add last seen status if available
-        if (rolimonsData && rolimonsData.lastOnlineText) {
-            fields.push({ 
-                name: "Last Seen", 
-                value: rolimonsData.lastOnlineText, 
-                inline: true 
-            });
-        }
-        
-        // Add trade ads count if available
-        if (rolimonsData && rolimonsData.tradeAds !== undefined) {
-            fields.push({ 
-                name: "Trade Ads", 
-                value: rolimonsData.tradeAds.toString(), 
-                inline: true 
-            });
+        // Extract just the username from Discord mention/ID
+        let cleanDiscordUsername = discordUsername;
+        if (discordUsername.includes('<@') && discordUsername.includes('>')) {
+            // It's a mention, extract the username part
+            cleanDiscordUsername = discordUsername.replace(/<@!?(\d+)>/g, 'User ID: $1');
         }
         
         const payload = {
             embeds: [{
-                title: "✨ New Discord Found!",
+                title: "�� New Discord Found!",
                 color: 0x00AE86,
-                fields: fields,
+                fields: [
+                    { name: "Roblox", value: robloxUsername, inline: true },
+                    { name: "Discord", value: cleanDiscordUsername, inline: true }
+                ],
                 timestamp: new Date().toISOString()
             }]
         };
@@ -684,56 +605,41 @@ client.on('messageCreate', async (message) => {
     console.log('📨 Received Discord bot response');
     waitingForResponse = false;
     let discordUsername = '';
-    let isUserFound = true;
+    let isUserFound = false;
 
     if (message.embeds && message.embeds.length > 0) {
         const embed = message.embeds[0];
-        
-        // Check if this is an error message (user not found, not verified, etc.)
+        // Try to extract from description (where RoVer puts the Discord username)
         if (embed.description) {
-            const description = embed.description.toLowerCase();
-            if (description.includes('specified user is not in this server') || 
-                description.includes('not verified') ||
-                description.includes('user not found') ||
-                description.includes('no discord found')) {
-                console.log('❌ User not found or not verified, skipping webhook');
-                isUserFound = false;
-                return;
-            }
-        }
-        
-        // Try to extract Discord username from embed title (where RoVer puts it)
-        if (embed.title) {
-            discordUsername = embed.title.trim();
-            console.log(`✅ Found Discord username in title: ${discordUsername}`);
-        }
-        // Fallback: try to extract from description
-        else if (embed.description) {
             // The Discord username is the first line
             discordUsername = embed.description.split('\n')[0].trim();
-            console.log(`✅ Found Discord username in description: ${discordUsername}`);
+            // Check if it's a valid Discord username (not an error message)
+            if (discordUsername && !discordUsername.includes('Specified user is not in this server') && !discordUsername.includes('not verified')) {
+                isUserFound = true;
+            }
         }
         // Fallback: check fields for a Discord username
-        else if (embed.fields && embed.fields.length > 0) {
+        if (!discordUsername && embed.fields && embed.fields.length > 0) {
             for (const field of embed.fields) {
                 if (field.name.toLowerCase().includes('discord')) {
                     discordUsername = field.value;
+                    if (discordUsername && !discordUsername.includes('Specified user is not in this server') && !discordUsername.includes('not verified')) {
+                        isUserFound = true;
+                    }
                     break;
                 }
             }
         }
     }
 
-    if (discordUsername && global.currentRobloxUsername && isUserFound) {
+    // Only send webhook if user is actually found
+    if (isUserFound && discordUsername && global.currentRobloxUsername) {
         console.log(`✅ Discord found: ${discordUsername} for ${global.currentRobloxUsername}`);
-        // Get the Rolimons data for this user to include in webhook
-        const rolimonsData = global.currentRolimonsData || {};
-        await sendToWebhook(global.currentRobloxUsername, discordUsername, rolimonsData);
-        // Mark as found to avoid duplicate processing
+        await sendToWebhook(global.currentRobloxUsername, discordUsername, {});
         global.currentRobloxUsername = null;
-        global.currentRolimonsData = null;
-    } else if (isUserFound) {
-        console.log('❌ No Discord username found in bot response');
+    } else {
+        console.log('❌ No valid Discord user found in bot response');
+        global.currentRobloxUsername = null;
     }
 });
 
