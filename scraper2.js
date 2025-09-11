@@ -8,9 +8,9 @@ const express = require('express');
 
 // Configuration - Railway deployment ready
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID || ;
-const WEBHOOK_URL = process.env.WEBHOOK_URL || ;
-const ITEM_IDS = process.env.ITEM_IDS || ; // Comma-separated item IDs
+const CHANNEL_ID = process.env.CHANNEL_ID || '542147434122444838';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://discord.com/api/webhooks/1380043690390847558/DcQu2O3olvdiSD0r5TKyU4YHRH4rBGFZbY93gXMSvcYEi71Z9rGzCYiZXJppRCK8Vr3A';
+const ITEM_IDS = process.env.ITEM_IDS || '123456,789012'; // Comma-separated item IDs
 
 // Validate required environment variables
 if (!DISCORD_TOKEN) {
@@ -69,7 +69,7 @@ app.get('/', (req, res) => {
 
 // Start Express server
 app.listen(PORT, () => {
-    console.log(`�� Healthcheck server running on port ${PORT}`);
+    console.log(`🌐 Healthcheck server running on port ${PORT}`);
 });
 
 client.on('ready', async () => {
@@ -229,7 +229,7 @@ async function scrapeRolimonsItem(itemId) {
         console.log(`🔄 Starting continuous scraping from page ${totalPages} (last page) going backwards...`);
 
         for (let page = totalPages; page >= 1; page--) {
-            console.log(`\n�� Processing page ${page}/${totalPages}`);
+            console.log(`\n📄 Processing page ${page}/${totalPages}`);
             if (page !== totalPages) {
                 // Click the correct pagination button for this page
                 const paginationButtons = await driver.findElements(By.css('a.page-link[data-dt-idx]'));
@@ -321,7 +321,7 @@ async function scrapeRolimonsItem(itemId) {
 
                     // Process user immediately
                     console.log(`🔍 Processing user: ${username}`);
-                    await runWhoisCommand(username);
+                    await runWhoisCommand(username, rolimons);
 
                     // Wait 10 seconds before moving to the next user
                     await new Promise(res => setTimeout(res, 10000));
@@ -491,8 +491,9 @@ async function scrapeRolimonsUserProfile(profileUrl) {
     }
 }
 
-async function runWhoisCommand(username) {
+async function runWhoisCommand(username, rolimonsData) {
     global.currentRobloxUsername = username; // Set this BEFORE sending the command
+    global.currentRolimonsData = rolimonsData; // Store Rolimons data for webhook
     console.log(`Running /whois roblox username:${username}...`);
     
     const channel = await client.channels.fetch(CHANNEL_ID);
@@ -542,21 +543,46 @@ async function getRobloxUserData(username) {
 async function sendToWebhook(robloxUsername, discordUsername, rolimonsData) {
     console.log(`📤 sendToWebhook called: Roblox=${robloxUsername}, Discord=${discordUsername}`);
     try {
-        // Extract just the username from Discord mention/ID
-        let cleanDiscordUsername = discordUsername;
-        if (discordUsername.includes('<@') && discordUsername.includes('>')) {
-            // It's a mention, extract the username part
-            cleanDiscordUsername = discordUsername.replace(/<@!?(\d+)>/g, 'User ID: $1');
+        // Clean Discord username (remove any mention formatting)
+        const cleanDiscordUsername = discordUsername.replace(/<@!?\d+>/g, '').trim();
+        
+        const fields = [
+            { name: "🎮 Roblox", value: robloxUsername, inline: true },
+            { name: "Discord", value: cleanDiscordUsername, inline: true }
+        ];
+        
+        // Add Rolimons value if available
+        if (rolimonsData && rolimonsData.value) {
+            fields.push({ 
+                name: "Rolimons Value", 
+                value: `R$ ${rolimonsData.value.toLocaleString()}`, 
+                inline: true 
+            });
+        }
+        
+        // Add last seen status if available
+        if (rolimonsData && rolimonsData.lastOnlineText) {
+            fields.push({ 
+                name: "Last Seen", 
+                value: rolimonsData.lastOnlineText, 
+                inline: true 
+            });
+        }
+        
+        // Add trade ads count if available
+        if (rolimonsData && rolimonsData.tradeAds !== undefined) {
+            fields.push({ 
+                name: "Trade Ads", 
+                value: rolimonsData.tradeAds.toString(), 
+                inline: true 
+            });
         }
         
         const payload = {
             embeds: [{
-                title: "�� New Discord Found!",
+                title: "✨ New Discord Found!",
                 color: 0x00AE86,
-                fields: [
-                    { name: "Roblox", value: robloxUsername, inline: true },
-                    { name: "Discord", value: cleanDiscordUsername, inline: true }
-                ],
+                fields: fields,
                 timestamp: new Date().toISOString()
             }]
         };
@@ -635,17 +661,21 @@ client.on('messageCreate', async (message) => {
     // Only send webhook if user is actually found
     if (isUserFound && discordUsername && global.currentRobloxUsername) {
         console.log(`✅ Discord found: ${discordUsername} for ${global.currentRobloxUsername}`);
-        await sendToWebhook(global.currentRobloxUsername, discordUsername, {});
+        // Get the Rolimons data for this user to include in webhook
+        const rolimonsData = global.currentRolimonsData || {};
+        await sendToWebhook(global.currentRobloxUsername, discordUsername, rolimonsData);
         global.currentRobloxUsername = null;
+        global.currentRolimonsData = null;
     } else {
         console.log('❌ No valid Discord user found in bot response');
         global.currentRobloxUsername = null;
+        global.currentRolimonsData = null;
     }
 });
 
 // Railway deployment logging
 console.log('🚀 Starting Railway deployment...');
-console.log('�� Configuration:');
+console.log('📋 Configuration:');
 console.log(`   - Discord Token: ${DISCORD_TOKEN.substring(0, 20)}...`);
 console.log(`   - Channel ID: ${CHANNEL_ID}`);
 console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
