@@ -26,11 +26,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 let driver; // Global Selenium WebDriver instance
+let profileDriver; // Dedicated driver for profile scraping
 let waitingForResponse = false;
 let processedUsers = new Set();
 let currentMode = 'single';
 let totalLogged = 0;
 let isScraping = false;
+let retryCount = 0;
+const MAX_RETRIES = 3;
 
 // --- VPN SWITCHING ---
 const usCities = ['nyc', 'dal', 'atl', 'chi', 'lax', 'sea'];
@@ -123,11 +126,36 @@ async function initializeWebDriver() {
         options.addArguments('--disable-dev-shm-usage');
         options.addArguments('--disable-gpu');
         options.addArguments('--window-size=1920,1080');
+        options.addArguments('--disable-web-security');
+        options.addArguments('--disable-features=VizDisplayCompositor');
+        options.addArguments('--disable-extensions');
+        options.addArguments('--disable-plugins');
+        options.addArguments('--disable-images');
+        options.addArguments('--disable-javascript');
         options.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
         driver = await new Builder()
             .forBrowser('chrome')
             .setChromeOptions(options)
+            .build();
+
+        // Initialize profile driver with different settings
+        const profileOptions = new chrome.Options();
+        profileOptions.addArguments('--headless');
+        profileOptions.addArguments('--no-sandbox');
+        profileOptions.addArguments('--disable-dev-shm-usage');
+        profileOptions.addArguments('--disable-gpu');
+        profileOptions.addArguments('--window-size=1920,1080');
+        profileOptions.addArguments('--disable-web-security');
+        profileOptions.addArguments('--disable-features=VizDisplayCompositor');
+        profileOptions.addArguments('--disable-extensions');
+        profileOptions.addArguments('--disable-plugins');
+        profileOptions.addArguments('--disable-images');
+        profileOptions.addArguments('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
+        profileDriver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(profileOptions)
             .build();
 
         console.log('✅ Selenium WebDriver initialized successfully');
@@ -330,6 +358,30 @@ async function scrapeRolimonsItem(itemId) {
 
                 } catch (error) {
                     console.error(`❌ Error processing row ${i} (from bottom):`, error.message);
+                    // Add retry logic for critical errors
+                    if (error.message.includes('failed to start a thread') || error.message.includes('SIGTRAP')) {
+                        console.log('🔄 Critical error detected, attempting recovery...');
+                        await new Promise(res => setTimeout(res, 10000)); // Wait 10 seconds
+                        
+                        // Try to reinitialize drivers if they're broken
+                        try {
+                            if (driver) {
+                                await driver.quit();
+                            }
+                            if (profileDriver) {
+                                await profileDriver.quit();
+                            }
+                        } catch (e) {
+                            console.log('Error closing broken drivers:', e.message);
+                        }
+                        
+                        // Reinitialize
+                        await initializeWebDriver();
+                        
+                        // Skip this user and continue
+                        processedUsers.add(username || `unknown_${i}`);
+                        continue;
+                    }
                 }
             }
             console.log(`✅ Finished page ${page}/${totalPages}`);
@@ -357,8 +409,25 @@ async function scrapeRolimonsItem(itemId) {
         // Don't exit - keep the healthcheck server running
     } catch (error) {
         console.error('❌ Error during scraping:', error.message);
-        console.log('🔄 Restarting scrape in 10 seconds...');
-        setTimeout(() => scrapeRolimonsItem(itemId), 10000);
+        
+        if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            console.log(`🔄 Restarting scrape in 10 seconds... (attempt ${retryCount}/${MAX_RETRIES})`);
+            
+            // Try to reinitialize drivers
+            try {
+                if (driver) await driver.quit();
+                if (profileDriver) await profileDriver.quit();
+            } catch (e) {
+                console.log('Error closing drivers during restart:', e.message);
+            }
+            
+            await initializeWebDriver();
+            setTimeout(() => scrapeRolimonsItem(itemId), 10000);
+        } else {
+            console.log('❌ Max retries reached, giving up on this item');
+            retryCount = 0; // Reset for next item
+        }
     }
 }
 
@@ -379,26 +448,26 @@ function parseLastOnlineDays(text) {
     return 999; // fallback for unknown format
 }
 
-async function scrapeRolimonsUserProfile(profileUrl) {
-    const tempDriver = await new Builder()
-        .forBrowser('chrome')
-        .setChromeOptions(
-            new chrome.Options()
-                .addArguments('--headless')
-                .addArguments('--disable-gpu')
-                .addArguments('--window-size=1920,1080')
-                .addArguments('--no-sandbox')
-                .addArguments('--disable-dev-shm-usage')
-        )
-        .build();
+async function scrapeRolimonsUserProfile(profileUrl, retryAttempt = 0) {
+    if (!profileDriver) {
+        console.error('❌ Profile driver not initialized');
+        return {
+            tradeAds: 0,
+            rap: 0,
+            value: 0,
+            avatarUrl: '',
+            lastOnlineText: 'Unknown',
+            lastOnlineDays: 999
+        };
+    }
 
     try {
-        await tempDriver.get(profileUrl);
-        await tempDriver.sleep(2000);
+        await profileDriver.get(profileUrl);
+        await profileDriver.sleep(2000);
 
         const getText = async (selector) => {
             try {
-                const element = await tempDriver.findElement(By.css(selector));
+                const element = await profileDriver.findElement(By.css(selector));
                 return await element.getText();
             } catch {
                 return '';
@@ -408,7 +477,7 @@ async function scrapeRolimonsUserProfile(profileUrl) {
         let tradeAds = 0;
         try {
             try {
-                const tradeAdsElement = await tempDriver.findElement(By.css('span.card-title.mb-1.text-light.stat-data.text-nowrap'));
+                const tradeAdsElement = await profileDriver.findElement(By.css('span.card-title.mb-1.text-light.stat-data.text-nowrap'));
                 const text = await tradeAdsElement.getText();
                 if (text && !isNaN(text.replace(/,/g, ''))) {
                     tradeAds = parseInt(text.replace(/,/g, '')) || 0;
@@ -419,7 +488,7 @@ async function scrapeRolimonsUserProfile(profileUrl) {
             }
             if (tradeAds === 0) {
                 try {
-                    const contextElements = await tempDriver.findElements(By.xpath("//*[contains(text(), 'Trade Ads') and contains(text(), 'Created')]/following::*[contains(@class, 'stat-data')][1] | //*[contains(text(), 'Trade Ads') and contains(text(), 'Created')]/..//*[contains(@class, 'stat-data')]"));
+                    const contextElements = await profileDriver.findElements(By.xpath("//*[contains(text(), 'Trade Ads') and contains(text(), 'Created')]/following::*[contains(@class, 'stat-data')][1] | //*[contains(text(), 'Trade Ads') and contains(text(), 'Created')]/..//*[contains(@class, 'stat-data')]"));
                     if (contextElements.length > 0) {
                         const text = await contextElements[0].getText();
                         if (text && !isNaN(text.replace(/,/g, ''))) {
@@ -440,7 +509,7 @@ async function scrapeRolimonsUserProfile(profileUrl) {
                 ];
                 for (const selector of selectors) {
                     try {
-                        const elements = await tempDriver.findElements(By.css(selector));
+                        const elements = await profileDriver.findElements(By.css(selector));
                         for (const element of elements) {
                             const text = await element.getText();
                             if (text && /^\d{1,3}(,\d{3})*$/.test(text)) {
@@ -478,6 +547,14 @@ async function scrapeRolimonsUserProfile(profileUrl) {
         };
     } catch (error) {
         console.error('❌ Failed to scrape profile:', error.message);
+        
+        // Retry logic for profile scraping
+        if (retryAttempt < MAX_RETRIES && (error.message.includes('failed to start a thread') || error.message.includes('SIGTRAP'))) {
+            console.log(`🔄 Retrying profile scrape (attempt ${retryAttempt + 1}/${MAX_RETRIES})...`);
+            await new Promise(res => setTimeout(res, 5000)); // Wait 5 seconds
+            return await scrapeRolimonsUserProfile(profileUrl, retryAttempt + 1);
+        }
+        
         return {
             tradeAds: 0,
             rap: 0,
@@ -486,8 +563,6 @@ async function scrapeRolimonsUserProfile(profileUrl) {
             lastOnlineText: 'Unknown',
             lastOnlineDays: 999
         };
-    } finally {
-        await tempDriver.quit();
     }
 }
 
@@ -599,13 +674,26 @@ async function sendToWebhook(robloxUsername, discordUsername, rolimonsData) {
 }
 
 async function cleanup() {
+    console.log('🧹 Cleaning up resources...');
+    
     if (driver) {
         try {
             await driver.quit();
+            console.log('✅ Main driver closed');
         } catch (e) {
-            console.log('Error closing driver:', e.message);
+            console.log('Error closing main driver:', e.message);
         }
     }
+    
+    if (profileDriver) {
+        try {
+            await profileDriver.quit();
+            console.log('✅ Profile driver closed');
+        } catch (e) {
+            console.log('Error closing profile driver:', e.message);
+        }
+    }
+    
     client.destroy();
     // Only close readline if it exists (local development)
     if (typeof rl !== 'undefined') {
