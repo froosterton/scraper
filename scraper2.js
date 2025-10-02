@@ -19,7 +19,6 @@ if (!DISCORD_TOKEN) {
 }
 
 const client = new Client({ checkUpdate: false });
-// Remove readline for Railway deployment - no interactive CLI needed
 
 // Express server for healthcheck
 const app = express();
@@ -109,7 +108,6 @@ client.on('ready', async () => {
         }
         console.log("✅ All items scraped, script finished.");
         isScraping = false;
-        // Don't exit - keep the healthcheck server running
     } else {
         console.log('❌ No valid item IDs found in environment variables');
         process.exit(1);
@@ -166,12 +164,6 @@ async function initializeWebDriver() {
     }
 }
 
-// Removed showMainMenu - script now only does scraping
-
-// Removed promptForUsername - script now only does scraping
-
-// Removed promptForItemIds - script now uses ITEM_IDS from environment variables
-
 async function scrapeRolimonsItem(itemId) {
     try {
         const url = `https://www.rolimons.com/item/${itemId}`;
@@ -180,6 +172,22 @@ async function scrapeRolimonsItem(itemId) {
         // Navigate to the first page to get item name and find pagination
         await driver.get(url);
         await driver.sleep(5000);
+
+        // Click "All Copies" tab to get all users instead of just premium copies
+        try {
+            console.log('📋 Clicking "All Copies" tab...');
+            const allCopiesTab = await driver.findElement(By.css('a[href="#all_copies_table_container"]'));
+            const className = await allCopiesTab.getAttribute('class');
+            if (!className.includes('active')) {
+                await allCopiesTab.click();
+                await driver.sleep(3000);
+                console.log('✅ Successfully clicked "All Copies" tab');
+            } else {
+                console.log('✅ "All Copies" tab already active');
+            }
+        } catch (e) {
+            console.log('⚠️ Could not find/click "All Copies" tab, continuing with current tab');
+        }
 
         // Extract item name from page title
         let itemName = 'Unknown Item';
@@ -280,7 +288,7 @@ async function scrapeRolimonsItem(itemId) {
 
             let rows = [];
             const tableSelectors = [
-                '#bc_owners_table tbody tr',
+                '#all_copies_table tbody tr',
                 'table tbody tr',
                 '.table tbody tr',
                 'tbody tr'
@@ -304,7 +312,7 @@ async function scrapeRolimonsItem(itemId) {
 
             for (let i = rows.length - 1; i >= 0; i--) {
                 try {
-                    const currentRows = await driver.findElements(By.css('#bc_owners_table tbody tr, table tbody tr, .table tbody tr, tbody tr'));
+                    const currentRows = await driver.findElements(By.css('#all_copies_table tbody tr, table tbody tr, .table tbody tr, tbody tr'));
                     if (i >= currentRows.length) {
                         console.log(`⏭️ Row ${i} no longer exists, skipping...`);
                         continue;
@@ -406,7 +414,6 @@ async function scrapeRolimonsItem(itemId) {
         }
         console.log("✅ All users logged, script finished.");
         isScraping = false;
-        // Don't exit - keep the healthcheck server running
     } catch (error) {
         console.error('❌ Error during scraping:', error.message);
         
@@ -695,10 +702,6 @@ async function cleanup() {
     }
     
     client.destroy();
-    // Only close readline if it exists (local development)
-    if (typeof rl !== 'undefined') {
-        rl.close();
-    }
     process.exit(0);
 }
 
@@ -783,20 +786,3 @@ console.log(`   - Webhook URL: ${WEBHOOK_URL.substring(0, 50)}...`);
 console.log(`   - Item IDs: ${ITEM_IDS}`);
 console.log('🔐 Logging in to Discord...');
 client.login(DISCORD_TOKEN);
-
-// --- WEBHOOK TEST FUNCTION ---
-async function testWebhook() {
-    console.log('Testing webhook...');
-    try {
-        const response = await axios.post(WEBHOOK_URL, { content: 'Test webhook from scraper2.js' });
-        console.log('✅ Webhook test sent! Status:', response.status);
-    } catch (e) {
-        console.error('❌ Webhook TEST error:', e.message);
-        if (e.response) {
-            console.error('Response status:', e.response.status);
-            console.error('Response data:', e.response.data);
-        }
-    }
-}
-// Example: Uncomment to test
-// testWebhook();
